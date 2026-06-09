@@ -1,6 +1,8 @@
 # smod
 Version 1.0.0 - released
 
+INSTALL into: /mods/smod
+
 SMod (Sound Mod) is a Ren'Py music automation mod for LR2R that:
 
 Auto-detects location — Monitors the player character's current room and hub throughout the game
