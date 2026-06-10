@@ -1,16 +1,55 @@
 # Sound Mod
 
 init python:
-    
+
+    def on_music_end(channel='music'):
+        global smod_current_playlist
+        
+        if smod_current_playlist and len(smod_current_playlist) > 0:
+            # Get the next song index (cycle if at end)
+            if not hasattr(store, 'smod_playlist_index'):
+                store.smod_playlist_index = 0
+            
+            # Find current song index in the playlist
+            if hasattr(store, 'smod_last_song') and store.smod_last_song and store.smod_last_song in smod_current_playlist:
+                try:
+                    current_index = smod_current_playlist.index(store.smod_last_song)
+                    # Calculate next index (cycle if at end of playlist)
+                    next_index = (current_index + 1) % len(smod_current_playlist)
+                    store.smod_playlist_index = next_index
+                except ValueError:
+                    store.smod_playlist_index = random.randint(0, len(smod_current_playlist) - 1)
+            else:
+                # No last song, start from beginning or random
+                store.smod_playlist_index = random.randint(0, len(smod_current_playlist) - 1)
+            
+            # Play the next song
+            next_track = smod_current_playlist[store.smod_playlist_index]
+            
+            # Extract the song name for notification
+            try:
+                song_name = next_track.split("/")[-1].replace(".mp3", "")
+                song_name_escaped = song_name.replace("{", "{{").replace("}", "}}")
+            except:
+                song_name = "Track"
+            
+            # Play the chosen track
+            renpy.music.stop(channel=channel, fadeout=0.5)
+            renpy.music.play(next_track, loop=False, fadein=1.0)
+            renpy.music.set_end(on_music_end, channel=channel)
+            
+            # Update last song tracker
+            store.smod_last_song = next_track
+            # renpy.notify("Now playing: " + song_name)
+
     def get_mp3_playlist(directory="audio/bgm"):
-        """Scans a directory for MP3 files and returns a list of paths."""
+        # Scans a directory for MP3 files and returns a list of paths.
         playlist = []
         # renpy.list_files() lists files in the game directory and archives
         for filename in renpy.list_files(common=False):
             if directory in filename and filename.endswith(".mp3"):
                 playlist.append(filename)
         return playlist
-    
     
     # Define a variable holding the list of all found music files
     bar_playlist = get_mp3_playlist(directory="mods/smod/music/bar_music")
@@ -20,18 +59,23 @@ init python:
     park_playlist = get_mp3_playlist(directory="mods/smod/music/park_music")
     strip_playlist = get_mp3_playlist(directory="mods/smod/music/strip_music")
     uni_playlist = get_mp3_playlist(directory="mods/smod/music/university_music")
-    
-    if not hasattr(store, 'smod_last_room_name'):
-            store.smod_last_room_name = None
-            
-    def smod_notify(message, duration=3.0):
-        """Custom VT notification with styled popup"""
-        # First hide any existing VT notification        
-        renpy.hide_screen("smod_notification")
-        # Show our styled notification
-        renpy.show_screen("smod_notification", message=message, duration=duration)  
 
-    # 2. Define the check function
+    if not hasattr(store, 'smod_last_hub_name'):
+        store.smod_last_hub_name = None    
+    if not hasattr(store, 'smod_last_room_name'):
+        store.smod_last_room_name = None
+    if not hasattr(store, 'smod_target_playlist'):
+        store.smod_target_playlist = None
+    if not hasattr(store, 'smod_last_song'):
+        store.smod_last_song = None
+    if not hasattr(store, 'smod_next_track'):
+        store.smod_next_track = None
+    if not hasattr(store, 'smod_current_playlist'):
+        store.smod_current_playlist = None
+
+    if not hasattr(store, 'smod_playlist_index'):
+        store.smod_playlist_index = None
+
     # We use try/except to ensure that if the mod is removed, the game doesn't crash.
     # It will just stop playing dynamic music.
     def check_music():
@@ -45,131 +89,166 @@ init python:
             if hasattr(mc, 'current_location_hub') and mc.current_location_hub:
                 current_hub = mc.current_location_hub.name
 
-            location_id = current_room
+            # Determine target_playlist for this location
+            target_playlist = get_playlist_for_location(current_room, current_hub)
 
-            # If we are already in this room, do nothing
-            if store.smod_last_room_name == location_id:
+            # If target_playlist is None, no music for this location
+            if target_playlist is None:
                 return
 
-            # Room changed, update tracker and play music
-            store.smod_last_room_name = location_id
-            
+            # Only update and play music if playlist changed
+            # Compare by content (list equality works for this)
+            if store.smod_target_playlist != target_playlist:
+                renpy.music.stop(channel='music', fadeout=1.0)
+                smod_current_playlist = target_playlist
+                store.smod_last_song = None
+                store.smod_last_room_name = current_room
+                store.smod_last_hub_name = current_hub
+                store.smod_target_playlist = target_playlist
+                play_location_music(target_playlist)
+            else:
+                store.smod_last_room_name = current_room
+                store.smod_last_hub_name = current_hub
+
             # Call your player function
-            play_location_music(current_room)
+            #play_location_music(target_playlist)
         except:
             # If anything goes wrong (mod removed, error in logic), fail silently
             pass
 
-
-screen smod_notification(message, duration=3.0):
-    modal False
-    zorder 100
-    
-    frame:
-        style "smod_frame"
-        xalign 0.5
-        yalign 0.15
-        padding (20, 15)
+    def get_playlist_for_location(room_name, hub_name):
+        # Helper to determine which playlist a room belongs to
         
-        text message:
-            style "smod_notify_text"
-            text_align 0.5
-    
-    timer duration action Hide("smod_notification")
+        # Specific to ROOM
+        # if room_name == "mc_bedroom":
+            # return home_playlist
+        # elif room_name in ["office", "lobby", "main_office", "rd_div", "ceo_office", "market_div", "prod_div"]:
+            # return lab_playlist
+        # elif room_name in ["home_hall", "kitchen", "mom_bedroom", "lily_bedroom"]:
+            # return home_playlist
+        # elif room_name == "bar":
+            # return bar_playlist
+        # elif room_name == "stripclub":
+            # return strip_playlist
+        # elif room_name in ["university", "campus"]:
+            # return uni_playlist
+        # elif hub_name in ["uni_home", "industrial"]:
+            # return uni_playlist
+        # elif room_name in ["park_hub", "park"]:
+            # return park_playlist
+        # elif room_name in ["downtown", "coffee_shop", "hotel_lobby", "hospital"]:
+            # return downtown_playlist
 
-style smod_frame:
-    background "#3c0606"  # Dark purple-black background
-    size 28
+        # Specific to HUB
+        if hub_name in ["home", "Home", "home_hall"]:
+            if room_name == "dungeon":
+                return strip_playlist
+            elif room_name in ["bathroom", "home_shower", "laundry_room"]:
+                return park_playlist
+            else:
+                return home_playlist
+        elif hub_name == "aunt_home":
+            return home_playlist
+        elif hub_name == "office":
+            if room_name == "break_room":
+                return park_playlist
+            elif room_name in ["work_bathroom", "storage_room"]:
+                return strip_playlist
+            else:
+                return lab_playlist
+        elif hub_name == "mall":
+            if room_name in ["gaming_cafe_store_room", "mall_bathroom", "changing_room"]:
+                return strip_playlist
+            elif room_name == "gaming_cafe":
+                return home_playlist
+            else:
+                return downtown_playlist
+        elif hub_name == "sex_shop":
+            return strip_playlist
+        elif hub_name == "downtown":
+            if room_name in ["bar", "coffee_shop", "bar_bathroom", "hotel_room"]:
+                return bar_playlist
+            elif room_name in ["hotel_lobby", "fancy_restaurant", "mom_office_lobby", "mom_office", "hospital", "hospital_room"]:
+                return park_playlist
+            else:
+                return downtown_playlist
+        elif hub_name == "plaza":
+            return downtown_playlist
+        elif hub_name == "gym":
+            return park_playlist
+        elif hub_name == "university":
+            if room_name in ["study_room", "university_bathroom"]:
+                return strip_playlist
+            else:
+                return uni_playlist
+        elif hub_name == "mansion":
+            return home_playlist            
+        elif hub_name == "stripclub":
+            return strip_playlist
+        elif hub_name == "residential":
+            return home_playlist
+        elif hub_name == "industrial":
+            return home_playlist
+        elif hub_name == "downtown_home":
+            return home_playlist
+        elif hub_name == "uni_home":
+            return home_playlist
+        elif hub_name in ["park_hub", "park"]:
+            return park_playlist          
+        return None  # No playlist defined for this room
 
-style smod_notify_text:
-    color "#ffccff"       # Pinkish-white text
-    size 24
-    slow_cps 0
-
-init python:
-    # Hijack the start label to run our initialization code
-    add_label_hijack("normal_start", "smod_hook")
-    add_label_hijack("change_location", "smod_hook")
-
-label smod_hook(*args, **kwargs):
-    python:
-
-        check_music()
-
-    return
-
-# 4. Define your music logic using the playlists defined earlier
-init python:
-    def play_location_music(room_name):
-        # room_name is now just a string (e.g. "lobby")
-        dest_name = room_name
-        hub_name = ""
-
-        # We need to find the Hub Name manually since we only have the room name string
-        # We have to look it up from mc
-        try:
-            if mc and hasattr(mc, 'current_location_hub') and mc.current_location_hub:
-                hub_name = mc.current_location_hub.name
-        except:
-            pass
-        # 2. Logic to map locations to your playlists
-        # We determine which playlist to use based on the room name
-        target_playlist = []
+    def play_location_music(target_playlist):
+        global smod_current_playlist
+        smod_current_playlist = target_playlist
         
-        if dest_name == "mc_bedroom":
-            target_playlist = home_playlist
-        elif dest_name in ["office", "lobby", "main_office", "rd_div", "ceo_office", "market_div", "prod_div"]:
-            target_playlist = lab_playlist
-        elif dest_name in ["home_hall", "kitchen", "mom_bedroom", "lily_bedroom"]:
-            target_playlist = home_playlist
-        elif dest_name == "bar":
-            target_playlist = bar_playlist
-        elif dest_name == "stripclub":
-            target_playlist = strip_playlist
-        elif dest_name in ["university", "campus"]:
-            target_playlist = uni_playlist
-        elif hub_name in ["uni_home", "industrial"]:
-            target_playlist = uni_playlist
-        elif dest_name in ["park_hub", "park"]:
-            target_playlist = park_playlist
-        elif dest_name in ["downtown", "coffee_shop", "hotel_lobby", "hospital"]:
-            target_playlist = downtown_playlist
+        # Reset the playlist index when changing playlists
+        if target_playlist and len(target_playlist) > 0:
+            store.smod_playlist_index = random.randint(0, len(target_playlist) - 1)
+        else:
+            store.smod_playlist_index = 0
 
-        # 3. Check if we found a valid playlist and if it has songs
-        if not target_playlist:
-            return
-
-        # 4. Check if we need to stop the current music
-        # We check if the currently playing track is in the NEW playlist.
-        # If not (e.g., we are leaving the Lab to go Home), we stop the music first.
+        # Check if we need to stop the current music
         current_track = renpy.music.get_playing(channel='music')
         should_stop = False
         
         if current_track and current_track not in target_playlist:
             should_stop = True
 
-        # 5. Play the music
-        try:
-            if should_stop:
-                renpy.music.stop(fadeout=1.0)
-            
-            # Pick a random track from the playlist
-            # Using the standard 'random' module
+        if should_stop:
+            renpy.music.stop(fadeout=1.0)
+        
+        # Pick a random track from the playlist (or use stored index)
+        if store.smod_playlist_index is not None and 0 <= store.smod_playlist_index < len(target_playlist):
+            next_track = target_playlist[store.smod_playlist_index]
+        else:
             next_track = random.choice(target_playlist)
-            
-            # Extract the song name from the full path
-            # Example: "mods/smod/music/bar_music/song.mp3" -> "song.mp3"
+            store.smod_playlist_index = target_playlist.index(next_track)
+        
+        # Extract the song name for notification
+        try:
             song_name = next_track.split("/")[-1].replace(".mp3", "")
-            # Remove the .mp3 extension and escape special characters
             song_name_escaped = song_name.replace("{", "{{").replace("}", "}}")
-            
-            # Play the chosen track
-            renpy.music.play(next_track, loop=True, fadein=1.0)
+        except:
+            song_name = "Track"
 
-            # Debugging (Optional: comment this out later)
-            #smod_notify("Now Playing: " + dest_name, duration=2.0)
-            smod_notify("{q}Now Playing: {}{/q}".format(song_name_escaped), duration=2.0)
+        # Play the chosen track
+        renpy.music.play(next_track, loop=True, fadein=1.0)
+        renpy.music.set_end(on_music_end, channel='music')
+        
+        # Update last song tracker
+        store.smod_last_song = next_track
 
-        except Exception as e:
-            print(f"SMod Music Error: {e}")
-    
+init 99 python:
+    # Hijack the start label to run our initialization code
+    add_label_hijack("normal_start", "smod_hook")
+    add_label_hijack("game_loop", "smod_change_location")
+
+label smod_hook(*args, **kwargs):
+    python:
+        check_music()
+    return
+
+label smod_change_location(*args, **kwargs):
+    python:
+        check_music()
+    return
