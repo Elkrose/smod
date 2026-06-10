@@ -1,4 +1,6 @@
 # smod
+V 1.0.1 - Fixed the music and menu bug
+
 Version 1.0.0 - released
 
 INSTALL into: /mods/
