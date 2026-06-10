@@ -3,6 +3,7 @@ Version 1.0.0 - released
 
 INSTALL into: /mods/
 The path should be: /mods/smod/ smod files her
+
 If you downloaded using the zip/rar: Rename  'smod-main' folder to 'smod' still should be INSTALLED into: /mods/smod
 
 SMod (Sound Mod) is a Ren'Py music automation mod for LR2R that:
