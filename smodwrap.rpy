@@ -2,46 +2,6 @@
 
 init python:
 
-    def on_music_end(channel='music'):
-        global smod_current_playlist
-        
-        if smod_current_playlist and len(smod_current_playlist) > 0:
-            # Get the next song index (cycle if at end)
-            if not hasattr(store, 'smod_playlist_index'):
-                store.smod_playlist_index = 0
-            
-            # Find current song index in the playlist
-            if hasattr(store, 'smod_last_song') and store.smod_last_song and store.smod_last_song in smod_current_playlist:
-                try:
-                    current_index = smod_current_playlist.index(store.smod_last_song)
-                    # Calculate next index (cycle if at end of playlist)
-                    next_index = (current_index + 1) % len(smod_current_playlist)
-                    store.smod_playlist_index = next_index
-                except ValueError:
-                    store.smod_playlist_index = random.randint(0, len(smod_current_playlist) - 1)
-            else:
-                # No last song, start from beginning or random
-                store.smod_playlist_index = random.randint(0, len(smod_current_playlist) - 1)
-            
-            # Play the next song
-            next_track = smod_current_playlist[store.smod_playlist_index]
-            
-            # Extract the song name for notification
-            try:
-                song_name = next_track.split("/")[-1].replace(".mp3", "")
-                song_name_escaped = song_name.replace("{", "{{").replace("}", "}}")
-            except:
-                song_name = "Track"
-            
-            # Play the chosen track
-            renpy.music.stop(channel=channel, fadeout=0.5)
-            renpy.music.play(next_track, loop=False, fadein=1.0)
-            renpy.music.set_end(on_music_end, channel=channel)
-            
-            # Update last song tracker
-            store.smod_last_song = next_track
-            # renpy.notify("Now playing: " + song_name)
-
     def get_mp3_playlist(directory="audio/bgm"):
         # Scans a directory for MP3 files and returns a list of paths.
         playlist = []
@@ -68,13 +28,10 @@ init python:
         store.smod_target_playlist = None
     if not hasattr(store, 'smod_last_song'):
         store.smod_last_song = None
-    if not hasattr(store, 'smod_next_track'):
-        store.smod_next_track = None
     if not hasattr(store, 'smod_current_playlist'):
         store.smod_current_playlist = None
-
     if not hasattr(store, 'smod_playlist_index'):
-        store.smod_playlist_index = None
+        store.smod_playlist_index = 0
 
     # We use try/except to ensure that if the mod is removed, the game doesn't crash.
     # It will just stop playing dynamic music.
@@ -100,7 +57,7 @@ init python:
             # Compare by content (list equality works for this)
             if store.smod_target_playlist != target_playlist:
                 renpy.music.stop(channel='music', fadeout=1.0)
-                smod_current_playlist = target_playlist
+                store.smod_current_playlist = target_playlist
                 store.smod_last_song = None
                 store.smod_last_room_name = current_room
                 store.smod_last_hub_name = current_hub
@@ -198,45 +155,28 @@ init python:
         return None  # No playlist defined for this room
 
     def play_location_music(target_playlist):
-        global smod_current_playlist
-        smod_current_playlist = target_playlist
+        store.smod_current_playlist = target_playlist
         
-        # Reset the playlist index when changing playlists
-        if target_playlist and len(target_playlist) > 0:
-            store.smod_playlist_index = random.randint(0, len(target_playlist) - 1)
-        else:
-            store.smod_playlist_index = 0
+        if not target_playlist or len(target_playlist) == 0:
+            return
 
-        # Check if we need to stop the current music
         current_track = renpy.music.get_playing(channel='music')
-        should_stop = False
-        
         if current_track and current_track not in target_playlist:
-            should_stop = True
-
-        if should_stop:
             renpy.music.stop(fadeout=1.0)
         
-        # Pick a random track from the playlist (or use stored index)
-        if store.smod_playlist_index is not None and 0 <= store.smod_playlist_index < len(target_playlist):
-            next_track = target_playlist[store.smod_playlist_index]
-        else:
-            next_track = random.choice(target_playlist)
-            store.smod_playlist_index = target_playlist.index(next_track)
+        # Pick random start
+        store.smod_playlist_index = random.randint(0, len(target_playlist) - 1)
         
-        # Extract the song name for notification
-        try:
-            song_name = next_track.split("/")[-1].replace(".mp3", "")
-            song_name_escaped = song_name.replace("{", "{{").replace("}", "}}")
-        except:
-            song_name = "Track"
-
-        # Play the chosen track
-        renpy.music.play(next_track, loop=True, fadein=1.0)
-        renpy.music.set_end(on_music_end, channel='music')
+        # Play first track
+        first_track = target_playlist[store.smod_playlist_index]
+        renpy.music.play(first_track, channel='music', loop=False, fadein=1.0)
         
-        # Update last song tracker
-        store.smod_last_song = next_track
+        # Queue up the next 10 tracks (they play automatically when each ends)
+        for i in range(1, 11):
+            idx = (store.smod_playlist_index + i) % len(target_playlist)
+            renpy.music.queue(target_playlist[idx], channel='music')
+        
+        store.smod_last_song = first_track
 
 init 101 python:
     # Hijack the start label to run our initialization code
@@ -249,7 +189,8 @@ label smod_hook(stack):
         execute_hijack_call(stack)
     return
 
-label smod_change_location(*args, **kwargs):
+label smod_change_location(stack):
     python:
         check_music()
+        execute_hijack_call(stack)
     return

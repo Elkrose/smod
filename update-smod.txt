@@ -1,3 +1,5 @@
+1.0.3 - fix song switch, now it will keep playing
+
 1.0.2 - fixed hijack hook
 
 V 1.0.1 - Fixed the music and menu bug
