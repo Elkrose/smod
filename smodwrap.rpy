@@ -238,14 +238,15 @@ init python:
         # Update last song tracker
         store.smod_last_song = next_track
 
-init 99 python:
+init 101 python:
     # Hijack the start label to run our initialization code
     add_label_hijack("normal_start", "smod_hook")
     add_label_hijack("game_loop", "smod_change_location")
 
-label smod_hook(*args, **kwargs):
+label smod_hook(stack):
     python:
         check_music()
+        execute_hijack_call(stack)
     return
 
 label smod_change_location(*args, **kwargs):
