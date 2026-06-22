@@ -1,7 +1,5 @@
 # smod
-V 1.0.1 - Fixed the music and menu bug
-
-Version 1.0.0 - released
+Sound Mod
 
 INSTALL into: /mods/
 The path should be: /mods/smod/ smod files her
